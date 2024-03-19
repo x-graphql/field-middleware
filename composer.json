@@ -1,0 +1,31 @@
+{
+    "name": "x-graphql/field-middleware",
+    "description": "Adding custom logics before and after when resolving fields",
+    "type": "library",
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "symplify/easy-coding-standard": "^12.1"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "XGraphQL\\FieldMiddleware\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "XGraphQL\\FieldMiddleware\\Test\\": "tests/"
+        }
+    },
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=8.2",
+        "webonyx/graphql-php": "^15.9"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
+    }
+}
