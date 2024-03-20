@@ -6,6 +6,7 @@ namespace XGraphQL\FieldMiddleware;
 
 use GraphQL\Executor\Executor;
 use GraphQL\Executor\Promise\Promise;
+use GraphQL\Executor\Promise\PromiseAdapter;
 use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\FieldDefinition;
 use GraphQL\Type\Definition\ObjectType;
@@ -30,12 +31,35 @@ final class FieldMiddleware
     /**
      * @param MiddlewareInterface[] $middlewares
      */
-    private function __construct(iterable $middlewares)
+    private function __construct(iterable $middlewares, private PromiseAdapter $promiseAdapter)
     {
         $this->appliedObjects = new \WeakMap();
 
         /// FIFO guaranteed
         $this->middlewares = array_reverse(iterator_to_array($middlewares));
+    }
+
+    /**
+     * @param Schema $schema
+     * @param MiddlewareInterface[] $middlewares
+     * @return Schema
+     */
+    public static function apply(Schema $schema, iterable $middlewares, PromiseAdapter $promiseAdapter = null): Schema
+    {
+        $promiseAdapter ??= Executor::getPromiseAdapter();
+        $instance = new self($middlewares, $promiseAdapter);
+
+        foreach (['query', 'mutation', 'subscription'] as $operation) {
+            $operationType = $schema->getOperationType($operation);
+
+            if (null === $operationType) {
+                continue;
+            }
+
+            $instance->applyObjectType($operationType);
+        }
+
+        return $schema;
     }
 
     private function applyObjectType(ObjectType $type): void
@@ -44,24 +68,62 @@ final class FieldMiddleware
             return;
         }
 
-        $middlewares = array_reverse(iterator_to_array($this->middlewares));
-
         foreach ($type->getFields() as $fieldDef) {
             /** @var FieldDefinition $fieldDef */
-            $originalResolver = $fieldDef->resolveFn ?? $operationType->resolveFieldFn ?? Executor::getDefaultFieldResolver();
+            $originalResolver = $fieldDef->resolveFn ?? $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
 
-            $fieldDef->resolveFn = array_reduce($middlewares, $this->makeMiddlewareResolver(...), $originalResolver);
+            $fieldDef->resolveFn = $this->makeResolver($originalResolver(...));
         }
 
-        $originalResolver = $operationType->resolveFieldFn ?? Executor::defaultFieldResolver(...);
+        $originalResolver = $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
 
-        $type->resolveFieldFn = array_reduce($middlewares, $this->makeMiddlewareResolver(...), $originalResolver);
+        $type->resolveFieldFn = $this->makeResolver($originalResolver(...));
+
+        $this->appliedObjects[$type] = true;
+    }
+
+    private function makeResolver(\Closure $originalResolver): \Closure
+    {
+        $middlewareResolver = array_reduce(
+            $this->middlewares,
+            $this->makeMiddlewareResolver(...),
+            $originalResolver
+        );
+
+        return function ($value, $args, $context, ResolveInfo $info) use ($middlewareResolver): mixed {
+            $result = $middlewareResolver($value, $args, $context, $info);
+
+            if ($this->promiseAdapter->isThenable($result)) {
+                $result = $this->promiseAdapter->convertThenable($result);
+            }
+
+            if ($result instanceof Promise) {
+                return $result->then(
+                    function (mixed $result) use ($info): mixed {
+                        $this->prepareReturnType($info->returnType);
+
+                        return $result;
+                    }
+                );
+            }
+
+            $this->prepareReturnType($info->returnType);
+
+            return $result;
+        };
+    }
+
+    private function makeMiddlewareResolver(\Closure $resolver, MiddlewareInterface $middleware): \Closure
+    {
+        return function ($value, $args, $context, $info) use ($resolver, $middleware): mixed {
+            return $middleware->resolve($value, $args, $context, $info, $resolver);
+        };
     }
 
     private function prepareReturnType(Type $type): void
     {
         if ($type instanceof WrappingType) {
-            $type->getInnermostType();
+            $type = $type->getInnermostType();
         }
 
         if ($type instanceof ObjectType) {
@@ -102,48 +164,5 @@ final class FieldMiddleware
         $this->applyObjectType($type);
 
         return $type;
-    }
-
-    private function makeMiddlewareResolver(\Closure $resolver, MiddlewareInterface $middleware): \Closure
-    {
-        return function ($value, $args, $context, ResolveInfo $info) use ($resolver, $middleware) {
-            $resultOrPromise = $middleware->resolve($value, $args, $context, $info, $resolver);
-
-            if ($resultOrPromise instanceof Promise) {
-                return $resultOrPromise->then(
-                    function (mixed $result) use ($info): mixed {
-                        $this->prepareReturnType($info->returnType);
-
-                        return $result;
-                    }
-                );
-            }
-
-            $this->prepareReturnType($info->returnType);
-
-            return $resultOrPromise;
-        };
-    }
-
-    /**
-     * @param Schema $schema
-     * @param MiddlewareInterface[] $middlewares
-     * @return void
-     */
-    public static function apply(Schema $schema, iterable $middlewares): Schema
-    {
-        $instance = new self($middlewares);
-
-        foreach (['query', 'mutation', 'subscription'] as $operation) {
-            $operationType = $schema->getOperationType($operation);
-
-            if (null === $operationType) {
-                continue;
-            }
-
-            $instance->applyObjectType($operationType);
-        }
-
-        return $schema;
     }
 }
