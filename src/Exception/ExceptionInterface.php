@@ -6,5 +6,4 @@ namespace XGraphQL\FieldMiddleware\Exception;
 
 interface ExceptionInterface extends \Throwable
 {
-
 }

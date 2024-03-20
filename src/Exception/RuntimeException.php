@@ -6,5 +6,4 @@ namespace XGraphQL\FieldMiddleware\Exception;
 
 class RuntimeException extends \RuntimeException implements ExceptionInterface
 {
-
 }

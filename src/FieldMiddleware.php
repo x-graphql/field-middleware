@@ -133,7 +133,7 @@ final class FieldMiddleware
         if ($type instanceof AbstractType) {
             $originalTypeResolver = $type->config['resolveType'] ?? null;
 
-            $resolveType = fn($objectValue, $context, ResolveInfo $info) => $this->resolveAbstractType(
+            $resolveType = fn ($objectValue, $context, ResolveInfo $info) => $this->resolveAbstractType(
                 $type,
                 $originalTypeResolver,
                 $objectValue,

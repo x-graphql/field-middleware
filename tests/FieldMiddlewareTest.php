@@ -52,22 +52,22 @@ SDL;
                 'fields' => [
                     'dummy1' => [
                         'type' => Type::string(),
-                        'resolve' => fn() => 'last',
+                        'resolve' => fn () => 'last',
                     ],
                     'dummy2' => Type::string(),
                 ],
-                'resolveField' => fn() => 'default last',
+                'resolveField' => fn () => 'default last',
             ])
         ]);
 
         FieldMiddleware::apply($schema, [
-            new class implements MiddlewareInterface {
+            new class() implements MiddlewareInterface {
                 public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): string
                 {
                     return 'first - ' . $next($value, $arguments, $context, $info);
                 }
             },
-            new class implements MiddlewareInterface {
+            new class() implements MiddlewareInterface {
                 public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): string
                 {
                     return 'second - ' . $next($value, $arguments, $context, $info);
@@ -93,7 +93,7 @@ SDL;
         $schema = BuildSchema::build(self::SDL);
 
         FieldMiddleware::apply($schema, [
-            new class implements MiddlewareInterface {
+            new class() implements MiddlewareInterface {
                 public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
                 {
                     if ($info->fieldName === 'name') {
@@ -175,7 +175,7 @@ GQL;
                             return new Deferred(function () use ($info) {
                                 $returnType = $info->returnType;
                                 assert($returnType instanceof ObjectType);
-                                $returnType->resolveFieldFn = fn() => 'John';
+                                $returnType->resolveFieldFn = fn () => 'John';
 
                                 return [];
                             });
@@ -188,7 +188,7 @@ GQL;
         FieldMiddleware::apply(
             $schema,
             [
-                new class implements MiddlewareInterface {
+                new class() implements MiddlewareInterface {
                     public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
                     {
                         $result = $next($value, $arguments, $context, $info);
@@ -222,7 +222,7 @@ GQL;
         $schema = BuildSchema::build(self::SDL);
 
         FieldMiddleware::apply($schema, [
-            new class implements MiddlewareInterface {
+            new class() implements MiddlewareInterface {
                 public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
                 {
                     $returnType = $info->returnType;
@@ -290,7 +290,7 @@ GQL;
         $schema = BuildSchema::build(self::SDL);
 
         FieldMiddleware::apply($schema, [
-            new class implements MiddlewareInterface {
+            new class() implements MiddlewareInterface {
                 public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
                 {
                     return $value;
