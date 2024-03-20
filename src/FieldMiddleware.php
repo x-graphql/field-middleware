@@ -9,6 +9,7 @@ use GraphQL\Executor\Promise\Promise;
 use GraphQL\Executor\Promise\PromiseAdapter;
 use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\FieldDefinition;
+use GraphQL\Type\Definition\NamedType;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
@@ -19,9 +20,9 @@ use XGraphQL\FieldMiddleware\Exception\RuntimeException;
 final class FieldMiddleware
 {
     /**
-     * @var \WeakMap<ObjectType>
+     * @var \WeakMap<NamedType&Type>
      */
-    private \WeakMap $appliedObjects;
+    private \WeakMap $preparedTypes;
 
     /**
      * @var MiddlewareInterface[]
@@ -33,7 +34,7 @@ final class FieldMiddleware
      */
     private function __construct(iterable $middlewares, private PromiseAdapter $promiseAdapter)
     {
-        $this->appliedObjects = new \WeakMap();
+        $this->preparedTypes = new \WeakMap();
 
         /// FIFO guaranteed
         $this->middlewares = array_reverse(iterator_to_array($middlewares));
@@ -56,30 +57,10 @@ final class FieldMiddleware
                 continue;
             }
 
-            $instance->applyObjectType($operationType);
+            $instance->prepareType($operationType);
         }
 
         return $schema;
-    }
-
-    private function applyObjectType(ObjectType $type): void
-    {
-        if (isset($this->appliedObjects[$type])) {
-            return;
-        }
-
-        foreach ($type->getFields() as $fieldDef) {
-            /** @var FieldDefinition $fieldDef */
-            $originalResolver = $fieldDef->resolveFn ?? $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
-
-            $fieldDef->resolveFn = $this->makeResolver($originalResolver(...));
-        }
-
-        $originalResolver = $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
-
-        $type->resolveFieldFn = $this->makeResolver($originalResolver(...));
-
-        $this->appliedObjects[$type] = true;
     }
 
     private function makeResolver(\Closure $originalResolver): \Closure
@@ -100,14 +81,14 @@ final class FieldMiddleware
             if ($result instanceof Promise) {
                 return $result->then(
                     function (mixed $result) use ($info): mixed {
-                        $this->prepareReturnType($info->returnType);
+                        $this->prepareType($info->returnType);
 
                         return $result;
                     }
                 );
             }
 
-            $this->prepareReturnType($info->returnType);
+            $this->prepareType($info->returnType);
 
             return $result;
         };
@@ -120,14 +101,27 @@ final class FieldMiddleware
         };
     }
 
-    private function prepareReturnType(Type $type): void
+    private function prepareType(Type $type): void
     {
         if ($type instanceof WrappingType) {
             $type = $type->getInnermostType();
         }
 
+        if (isset($this->preparedTypes[$type])) {
+            return;
+        }
+
         if ($type instanceof ObjectType) {
-            $this->applyObjectType($type);
+            foreach ($type->getFields() as $fieldDef) {
+                /** @var FieldDefinition $fieldDef */
+                $originalResolver = $fieldDef->resolveFn ?? $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
+
+                $fieldDef->resolveFn = $this->makeResolver($originalResolver(...));
+            }
+
+            $originalResolver = $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
+
+            $type->resolveFieldFn = $this->makeResolver($originalResolver(...));
         }
 
         if ($type instanceof AbstractType) {
@@ -143,6 +137,8 @@ final class FieldMiddleware
 
             $type->config['resolveType'] = $resolveType;
         }
+
+        $this->preparedTypes[$type] = true;
     }
 
     private function resolveAbstractType(AbstractType $abstractType, ?callable $originalResolver, $objectValue, $context, ResolveInfo $info): ObjectType
@@ -161,7 +157,7 @@ final class FieldMiddleware
 
         assert($type instanceof ObjectType);
 
-        $this->applyObjectType($type);
+        $this->prepareType($type);
 
         return $type;
     }
