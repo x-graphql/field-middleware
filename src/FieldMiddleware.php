@@ -32,7 +32,7 @@ final class FieldMiddleware
     /**
      * @param MiddlewareInterface[] $middlewares
      */
-    private function __construct(iterable $middlewares, private PromiseAdapter $promiseAdapter)
+    private function __construct(iterable $middlewares, private readonly PromiseAdapter $promiseAdapter)
     {
         $this->preparedTypes = new \WeakMap();
 
@@ -71,7 +71,7 @@ final class FieldMiddleware
             $originalResolver
         );
 
-        return function ($value, $args, $context, ResolveInfo $info) use ($middlewareResolver): mixed {
+        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use ($middlewareResolver): mixed {
             $result = $middlewareResolver($value, $args, $context, $info);
 
             if ($this->promiseAdapter->isThenable($result)) {
@@ -96,7 +96,7 @@ final class FieldMiddleware
 
     private function makeMiddlewareResolver(\Closure $resolver, MiddlewareInterface $middleware): \Closure
     {
-        return function ($value, $args, $context, $info) use ($resolver, $middleware): mixed {
+        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use ($resolver, $middleware): mixed {
             return $middleware->resolve($value, $args, $context, $info, $resolver);
         };
     }
@@ -127,7 +127,7 @@ final class FieldMiddleware
         if ($type instanceof AbstractType) {
             $originalTypeResolver = $type->config['resolveType'] ?? null;
 
-            $resolveType = fn ($objectValue, $context, ResolveInfo $info) => $this->resolveAbstractType(
+            $resolveType = fn(mixed $objectValue, mixed $context, ResolveInfo $info) => $this->resolveAbstractType(
                 $type,
                 $originalTypeResolver,
                 $objectValue,
