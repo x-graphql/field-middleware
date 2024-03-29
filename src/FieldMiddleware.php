@@ -49,15 +49,24 @@ final class FieldMiddleware
     {
         $promiseAdapter ??= Executor::getPromiseAdapter();
         $instance = new self($middlewares, $promiseAdapter);
+        $schemaConfig = $schema->getConfig();
 
         foreach (['query', 'mutation', 'subscription'] as $operation) {
-            $operationType = $schema->getOperationType($operation);
+            $operationConfig = $schemaConfig->{$operation};
 
-            if (null === $operationType) {
-                continue;
+            if ($operationConfig instanceof ObjectType) {
+                $instance->prepareType($operationConfig);
             }
 
-            $instance->prepareType($operationType);
+            if (is_callable($operationConfig)) {
+                $schemaConfig->{$operation} = function () use ($operationConfig, $instance) {
+                    $type = $operationConfig();
+
+                    $instance->prepareType($type);
+
+                    return $type;
+                };
+            }
         }
 
         return $schema;
@@ -71,7 +80,9 @@ final class FieldMiddleware
             $originalResolver
         );
 
-        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use ($middlewareResolver): mixed {
+        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use (
+            $middlewareResolver
+        ): mixed {
             $result = $middlewareResolver($value, $args, $context, $info);
 
             if ($this->promiseAdapter->isThenable($result)) {
@@ -96,7 +107,10 @@ final class FieldMiddleware
 
     private function makeMiddlewareResolver(\Closure $resolver, MiddlewareInterface $middleware): \Closure
     {
-        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use ($resolver, $middleware): mixed {
+        return function (mixed $value, array $args, mixed $context, ResolveInfo $info) use (
+            $resolver,
+            $middleware
+        ): mixed {
             return $middleware->resolve($value, $args, $context, $info, $resolver);
         };
     }
@@ -114,7 +128,8 @@ final class FieldMiddleware
         if ($type instanceof ObjectType) {
             foreach ($type->getFields() as $fieldDef) {
                 /** @var FieldDefinition $fieldDef */
-                $originalResolver = $fieldDef->resolveFn ?? $type->resolveFieldFn ?? Executor::getDefaultFieldResolver();
+                $originalResolver = $fieldDef->resolveFn ?? $type->resolveFieldFn ?? Executor::getDefaultFieldResolver(
+                );
 
                 $fieldDef->resolveFn = $this->makeResolver($originalResolver(...));
             }
@@ -127,7 +142,7 @@ final class FieldMiddleware
         if ($type instanceof AbstractType) {
             $originalTypeResolver = $type->config['resolveType'] ?? null;
 
-            $resolveType = fn(mixed $objectValue, mixed $context, ResolveInfo $info) => $this->resolveAbstractType(
+            $resolveType = fn (mixed $objectValue, mixed $context, ResolveInfo $info) => $this->resolveAbstractType(
                 $type,
                 $originalTypeResolver,
                 $objectValue,
@@ -141,8 +156,13 @@ final class FieldMiddleware
         $this->preparedTypes[$type] = true;
     }
 
-    private function resolveAbstractType(AbstractType $abstractType, ?callable $originalResolver, $objectValue, $context, ResolveInfo $info): ObjectType
-    {
+    private function resolveAbstractType(
+        AbstractType $abstractType,
+        ?callable $originalResolver,
+        $objectValue,
+        $context,
+        ResolveInfo $info
+    ): ObjectType {
         $type = null !== $originalResolver ? $originalResolver($objectValue, $context, $info) : null;
 
         if (null === $type) {
