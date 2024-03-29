@@ -57,19 +57,38 @@ SDL;
                     'dummy2' => Type::string(),
                 ],
                 'resolveField' => fn () => 'default last',
+            ]),
+            'mutation' => fn () => new ObjectType([
+                'name' => 'Mutation',
+                'fields' => [
+                    'dummy3' => [
+                        'type' => Type::string(),
+                        'resolve' => fn () => 'last mutation',
+                    ],
+                ]
             ])
         ]);
 
         FieldMiddleware::apply($schema, [
             new class() implements MiddlewareInterface {
-                public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): string
-                {
+                public function resolve(
+                    mixed $value,
+                    array $arguments,
+                    mixed $context,
+                    ResolveInfo $info,
+                    callable $next
+                ): string {
                     return 'first - ' . $next($value, $arguments, $context, $info);
                 }
             },
             new class() implements MiddlewareInterface {
-                public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): string
-                {
+                public function resolve(
+                    mixed $value,
+                    array $arguments,
+                    mixed $context,
+                    ResolveInfo $info,
+                    callable $next
+                ): string {
                     return 'second - ' . $next($value, $arguments, $context, $info);
                 }
             }
@@ -86,6 +105,17 @@ SDL;
             ],
             $result->toArray(DebugFlag::RETHROW_INTERNAL_EXCEPTIONS | DebugFlag::RETHROW_UNSAFE_EXCEPTIONS),
         );
+
+        $result = GraphQL::executeQuery($schema, 'mutation { dummy3 }');
+
+        $this->assertEquals(
+            [
+                'data' => [
+                    'dummy3' => 'first - second - last mutation',
+                ]
+            ],
+            $result->toArray(DebugFlag::RETHROW_INTERNAL_EXCEPTIONS | DebugFlag::RETHROW_UNSAFE_EXCEPTIONS),
+        );
     }
 
     public function testNotApplyMiddlewareTwice(): void
@@ -94,8 +124,13 @@ SDL;
 
         FieldMiddleware::apply($schema, [
             new class() implements MiddlewareInterface {
-                public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
-                {
+                public function resolve(
+                    mixed $value,
+                    array $arguments,
+                    mixed $context,
+                    ResolveInfo $info,
+                    callable $next
+                ): mixed {
                     if ($info->fieldName === 'name') {
                         return $next($value, $arguments, $context, $info) . ' Doe';
                     }
@@ -189,8 +224,13 @@ GQL;
             $schema,
             [
                 new class() implements MiddlewareInterface {
-                    public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
-                    {
+                    public function resolve(
+                        mixed $value,
+                        array $arguments,
+                        mixed $context,
+                        ResolveInfo $info,
+                        callable $next
+                    ): mixed {
                         $result = $next($value, $arguments, $context, $info);
 
                         if ($info->fieldName === 'name') {
@@ -223,8 +263,13 @@ GQL;
 
         FieldMiddleware::apply($schema, [
             new class() implements MiddlewareInterface {
-                public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
-                {
+                public function resolve(
+                    mixed $value,
+                    array $arguments,
+                    mixed $context,
+                    ResolveInfo $info,
+                    callable $next
+                ): mixed {
                     $returnType = $info->returnType;
 
                     if ($returnType instanceof InterfaceType && $info->fieldName === 'getFruit') {
@@ -291,8 +336,13 @@ GQL;
 
         FieldMiddleware::apply($schema, [
             new class() implements MiddlewareInterface {
-                public function resolve(mixed $value, array $arguments, mixed $context, ResolveInfo $info, callable $next): mixed
-                {
+                public function resolve(
+                    mixed $value,
+                    array $arguments,
+                    mixed $context,
+                    ResolveInfo $info,
+                    callable $next
+                ): mixed {
                     return $value;
                 }
             }
