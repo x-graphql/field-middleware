@@ -47,7 +47,7 @@ final class FieldMiddleware
      */
     public static function apply(Schema $schema, iterable $middlewares, PromiseAdapter $promiseAdapter = null): Schema
     {
-        $promiseAdapter ??= Executor::getPromiseAdapter();
+        $promiseAdapter ??= Executor::getDefaultPromiseAdapter();
         $instance = new self($middlewares, $promiseAdapter);
         $schemaConfig = $schema->getConfig();
 
