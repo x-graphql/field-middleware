@@ -20,7 +20,7 @@
     "minimum-stability": "stable",
     "require": {
         "php": ">=8.2",
-        "webonyx/graphql-php": "^15.9"
+        "webonyx/graphql-php": "^15.17"
     },
     "config": {
         "sort-packages": true,
